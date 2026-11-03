@@ -1,0 +1,58 @@
+name: Focused contribution validation
+
+on:
+  push:
+    branches: [validation/tinygo-2026-11-03]
+
+permissions:
+  contents: read
+
+jobs:
+  nil-interface:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CGO_ENABLED: 1
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache: false
+      - name: Install supported LLVM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y llvm-19-dev clang-19 libclang-19-dev lld-19 binaryen
+          echo /usr/lib/llvm-19/bin >> "$GITHUB_PATH"
+      - name: Fetch runtime build sources
+        run: |
+          git submodule update --init --depth 1 src/net lib/musl lib/picolibc lib/wasi-libc
+          make llvm-source
+      - name: Prove unchanged compiler fails runtime regression
+        run: |
+          git show 5808b6c784ae0ddbe895697d438bdc91a1a1518b:compiler/interface.go > compiler/interface.go
+          go build -tags=llvm19 -o build/tinygo-baseline .
+          build/tinygo-baseline run ./testdata/interface.go > baseline.txt 2>&1
+          if diff -u testdata/interface.txt baseline.txt; then
+            echo 'Expected nil-interface regression did not fail'
+            exit 1
+          fi
+          grep -F 'empty assertion: nil any true true false' baseline.txt
+          grep -F 'empty assertion: nil error true true false' baseline.txt
+          git restore compiler/interface.go
+      - name: Build fixed compiler and validate interface corpus
+        run: |
+          go build -tags=llvm19 -o build/tinygo .
+          build/tinygo version
+          build/tinygo run ./testdata/interface.go > fixed.txt 2>&1
+          diff -u testdata/interface.txt fixed.txt
+      - name: Validate reflection and compiler regressions
+        run: |
+          build/tinygo test -run '^TestTypeAssert' reflect
+          go test -count=1 -tags=llvm19 ./compiler -run '^TestCompiler/interface.go$' -v
+          go test -count=1 -tags=llvm19 ./compiler
+      - name: Check scoped formatting
+        run: |
+          test -z "$(gofmt -l compiler/interface.go src/reflect/value_test.go testdata/interface.go)"
