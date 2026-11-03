@@ -32,9 +32,10 @@ jobs:
           make llvm-source
       - name: Prove unchanged compiler fails runtime regression
         run: |
+          git fetch --depth 1 https://github.com/tinygo-org/tinygo.git 5808b6c784ae0ddbe895697d438bdc91a1a1518b
           git show 5808b6c784ae0ddbe895697d438bdc91a1a1518b:compiler/interface.go > compiler/interface.go
           go build -tags=llvm19 -o build/tinygo-baseline .
-          build/tinygo-baseline run ./testdata/interface.go > baseline.txt 2>&1
+          build/tinygo-baseline run ./testdata/interface.go > baseline.txt 2>&1 || { cat baseline.txt; exit 1; }
           if diff -u testdata/interface.txt baseline.txt; then
             echo 'Expected nil-interface regression did not fail'
             exit 1
@@ -46,7 +47,7 @@ jobs:
         run: |
           go build -tags=llvm19 -o build/tinygo .
           build/tinygo version
-          build/tinygo run ./testdata/interface.go > fixed.txt 2>&1
+          build/tinygo run ./testdata/interface.go > fixed.txt 2>&1 || { cat fixed.txt; exit 1; }
           diff -u testdata/interface.txt fixed.txt
       - name: Validate reflection and compiler regressions
         run: |
