@@ -28,7 +28,7 @@ jobs:
           echo /usr/lib/llvm-19/bin >> "$GITHUB_PATH"
       - name: Fetch runtime build sources
         run: |
-          git submodule update --init --depth 1 src/net lib/musl lib/picolibc lib/wasi-libc
+          git submodule update --init --depth 1 src/net lib/musl lib/picolibc lib/wasi-libc lib/bdwgc
           make llvm-source
       - name: Prove unchanged compiler fails runtime regression
         run: |
@@ -43,6 +43,18 @@ jobs:
           grep -F 'empty assertion: nil any true true false' baseline.txt
           grep -F 'empty assertion: nil error true true false' baseline.txt
           git restore compiler/interface.go
+      - name: Prove RuneCount allocation regression and verify fix independently
+        run: |
+          git show 5808b6c784ae0ddbe895697d438bdc91a1a1518b:src/unicode/utf8/utf8.go > src/unicode/utf8/utf8.go
+          if build/tinygo-baseline test -run '^TestRuneCountNonASCIIAllocation$' unicode/utf8 > rune-baseline.txt 2>&1; then
+            echo 'Expected RuneCount allocation regression did not fail'
+            exit 1
+          fi
+          cat rune-baseline.txt
+          grep -F 'allocated 1 times, want 0' rune-baseline.txt
+          git restore src/unicode/utf8/utf8.go
+          build/tinygo-baseline test unicode/utf8
+          build/tinygo-baseline test -target wasm unicode/utf8
       - name: Build fixed compiler and validate interface corpus
         run: |
           go build -tags=llvm19 -o build/tinygo .
