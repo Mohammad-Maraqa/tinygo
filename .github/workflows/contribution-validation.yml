@@ -23,9 +23,11 @@ jobs:
           cache: false
       - name: Install supported LLVM toolchain
         run: |
+          curl --fail --silent --show-error --max-time 30 https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/tinygo-llvm.gpg
+          echo 'deb [signed-by=/usr/share/keyrings/tinygo-llvm.gpg] https://apt.llvm.org/noble/ llvm-toolchain-noble-22 main' | sudo tee /etc/apt/sources.list.d/tinygo-llvm.list
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y llvm-19-dev clang-19 libclang-19-dev lld-19 binaryen
-          echo /usr/lib/llvm-19/bin >> "$GITHUB_PATH"
+          sudo apt-get install --no-install-recommends -y llvm-22-dev clang-22 libclang-22-dev lld-22 binaryen
+          echo /usr/lib/llvm-22/bin >> "$GITHUB_PATH"
       - name: Fetch runtime build sources
         run: |
           git submodule update --init --depth 1 src/net lib/musl lib/picolibc lib/wasi-libc lib/bdwgc
@@ -34,7 +36,7 @@ jobs:
         run: |
           git fetch --depth 1 https://github.com/tinygo-org/tinygo.git 5808b6c784ae0ddbe895697d438bdc91a1a1518b
           git show 5808b6c784ae0ddbe895697d438bdc91a1a1518b:compiler/interface.go > compiler/interface.go
-          go build -tags=llvm19 -o build/tinygo-baseline .
+          go build -tags=llvm22 -o build/tinygo-baseline .
           build/tinygo-baseline run ./testdata/interface.go > baseline.txt 2>&1 || { cat baseline.txt; exit 1; }
           if diff -u testdata/interface.txt baseline.txt; then
             echo 'Expected nil-interface regression did not fail'
@@ -57,15 +59,15 @@ jobs:
           build/tinygo-baseline test -target wasm unicode/utf8
       - name: Build fixed compiler and validate interface corpus
         run: |
-          go build -tags=llvm19 -o build/tinygo .
+          go build -tags=llvm22 -o build/tinygo .
           build/tinygo version
           build/tinygo run ./testdata/interface.go > fixed.txt 2>&1 || { cat fixed.txt; exit 1; }
           diff -u testdata/interface.txt fixed.txt
       - name: Validate reflection and compiler regressions
         run: |
           build/tinygo test -run '^TestTypeAssert' reflect
-          go test -count=1 -tags=llvm19 ./compiler -run '^TestCompiler/interface.go$' -v
-          go test -count=1 -tags=llvm19 ./compiler
+          go test -count=1 -tags=llvm22 ./compiler -run '^TestCompiler/interface.go$' -v
+          go test -count=1 -tags=llvm22 ./compiler
       - name: Check scoped formatting
         run: |
           test -z "$(gofmt -l compiler/interface.go src/reflect/value_test.go testdata/interface.go)"
